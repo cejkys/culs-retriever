@@ -1,0 +1,46 @@
+Devvit.configure({
+  redditAPI: true,
+});
+
+export async function handleNuke(props: NukeProps, context: Devvit.Context) {
+  try {
+    // Get Comment and User from Reddit API
+    const comment = await context.reddit.getCommentById(props.commentId);
+    const user = await context.reddit.getCurrentUser();
+
+    // Get Comments for Removal
+    const comments: Comment[] = [];
+    for await (const eachComment of getAllCommentsInThread(comment, skipDistinguished)) {
+      comments.push(eachComment);
+    }
+
+    // Remove all comments
+    await Promise.all(comments.map((comment) => comment.removed || comment.remove()));
+
+    // Add to Mod Log
+    try {
+      await context.modLog.add({
+        action: 'removecomment',
+        target: props.commentId,
+        details: 'comment-mop app',
+        description: `u/${user.username} used comment-mop to ${verbage} this comment and all child comments.`,
+      });
+    } catch (e: unknown) {
+      console.error(`Failed to add modlog for comment: ${props.commentId}.`, (e as Error).message);
+    }
+
+    // Show Toast with Result
+    context.ui.showToast('Comments removed! Refresh the page to see the cleanup.');
+  } catch (err: unknown) {
+    context.ui.showToast('Mop failed! Please try again later.');
+    console.error(err);
+  }
+}
+
+// Helper Function - Depth-first traversal to get all comments in a thread
+async function* getAllCommentsInThread(comment: Comment): AsyncGenerator<Comment> {
+  const replies = await comment.replies.all();
+  for (const reply of replies) {
+    yield* getAllCommentsInThread(reply);
+  }
+}
