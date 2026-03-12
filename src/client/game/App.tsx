@@ -50,12 +50,15 @@ export const App = () => {
             <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[#d93900]">
               Reddit API Demo
             </p>
-            <h1 className="text-3xl sm:text-4xl font-black leading-tight">Lucene-powered search</h1>
+            <h1 className="text-3xl sm:text-4xl font-black leading-tight">
+              Listing-powered search
+            </h1>
             <p className="text-gray-600 max-w-2xl">
-              Enter any Apache Lucene syntax query (e.g. <code>title:&quot;adhd&quot; AND
-              (therapy OR medication)</code>) and choose how many results to retrieve. Results are
-              fetched server-side and rendered below in a table; full text is preloaded and revealed
-              when you click &quot;View more&quot;.
+              Enter query terms (e.g. <code>adhd therapy</code> or{' '}
+              <code>&quot;adhd tips&quot; OR medication</code>) and choose how many results to
+              retrieve. Results are collected server-side from multiple /r/all listings and rendered
+              below in a table; full text is preloaded and revealed when you click &quot;View
+              more&quot;.
             </p>
           </div>
         </header>
@@ -66,14 +69,14 @@ export const App = () => {
         >
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold text-gray-800" htmlFor="lucene-query">
-              Lucene query
+              Query
             </label>
             <input
               id="lucene-query"
               className="w-full rounded-xl border border-gray-200 px-4 py-3 text-gray-900 shadow-inner focus:outline-none focus:ring-2 focus:ring-[#d93900]"
               value={queryInput}
               onChange={(e) => setQueryInput(e.target.value)}
-              placeholder='Example: title:"adhd" AND (therapy OR medication)'
+              placeholder='Example: "adhd tips" OR medication'
             />
           </div>
           <div className="flex flex-wrap items-center gap-4">
@@ -190,7 +193,9 @@ export const App = () => {
                               u/{post.author} • r/{post.subreddit}
                             </div>
                             <div className="mt-3 text-gray-700 text-sm leading-relaxed whitespace-pre-line">
-                              {expanded ? post.selftext || 'No selftext available.' : previewText(post.selftext)}
+                              {expanded
+                                ? post.selftext || 'No selftext available.'
+                                : previewText(post.selftext)}
                             </div>
                             {post.thumbnail && (
                               <div className="mt-3 w-full max-w-xs overflow-hidden rounded-lg border border-gray-100 bg-gray-50">
@@ -209,7 +214,9 @@ export const App = () => {
                           </td>
                           <td className="px-4 py-4 text-gray-800">{post.comments}</td>
                           <td className="px-4 py-4 text-gray-700">r/{post.subreddit}</td>
-                          <td className="px-4 py-4 text-gray-600">{formatAge(post.createdAt)} ago</td>
+                          <td className="px-4 py-4 text-gray-600">
+                            {formatAge(post.createdAt)} ago
+                          </td>
                           <td className="px-4 py-4 text-right space-y-2">
                             <button
                               className="text-sm font-semibold text-[#d93900] underline underline-offset-4"

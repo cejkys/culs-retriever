@@ -1,11 +1,11 @@
 # culs-retriever
 
-Devvit web app that surfaces Reddit posts using Lucene-style queries and displays them inside a custom post UI.
+Devvit web app that surfaces Reddit posts from /r/all listings and displays them inside a custom post UI.
 
 ## What it does
 
-- Accepts a Lucene query string plus a result limit (1-50).
-- Server searches Reddit via the public search API and falls back to recent /r/all posts when search fails or returns nothing.
+- Accepts a query string plus a result limit (1-50).
+- Server searches via the Devvit Reddit plugin only (aggregating/ranking `/r/all` `new`, `hot`, `rising`, and `top` listings).
 - Client renders results in a table with title, score, comments, subreddit, age, thumbnail, and a selftext preview with expand/collapse.
 - Links open the original post on reddit.com.
 
@@ -34,9 +34,9 @@ Prerequisites: Node 22 and the Devvit CLI.
 
 ## API
 
-- `GET /api/search-posts?query=<lucene>&limit=<1-50>`
+- `GET /api/search-posts?query=<text>&limit=<1-50>`
   - Returns `{ type: "searchPosts", query, limit, posts[], debug? }`.
-  - Falls back to filtering recent `/r/all` posts if upstream search fails or is empty.
+  - Collects a large candidate set from `/r/all` listings and filters/ranks results against parsed query terms.
 
 ## Notes
 

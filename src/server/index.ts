@@ -1,5 +1,10 @@
 import express from 'express';
-import { InitResponse, IncrementResponse, DecrementResponse, SearchPostsResponse } from '../shared/types/api';
+import {
+  InitResponse,
+  IncrementResponse,
+  DecrementResponse,
+  SearchPostsResponse,
+} from '../shared/types/api';
 import { redis, reddit, createServer, context, getServerPort } from '@devvit/web/server';
 import { createPost } from './core/post';
 
@@ -70,146 +75,96 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
       .filter((term) => !['and', 'or', 'not', 'title', 'selftext', 'body'].includes(term));
 
   const terms = mapTerms(query);
-  console.info('[search-posts] fallback terms', { requestId, count: terms.length, terms });
+  const phrases = Array.from(query.matchAll(/"([^"]+)"/g))
+    .map((match) => (match[1] ?? '').trim().toLowerCase())
+    .filter(Boolean);
+  const hasExplicitOr = /\bor\b/i.test(query);
+  const debugTerms = [...terms, ...phrases.map((phrase) => `"${phrase}"`)];
+  console.info('[search-posts] parsed terms', {
+    requestId,
+    terms,
+    phrases,
+    hasExplicitOr,
+  });
 
-  const fallbackSearch = async () => {
-    const listing = reddit.getNewPosts({
-      subredditName: 'all',
-      limit: Math.min(limit * 3, 100),
-    });
-    const freshPosts = await listing.all();
-
-    const fallbackPosts = freshPosts
-      .filter((post) => {
-        if (terms.length === 0) return true;
-        const haystack = `${post.title} ${post.body ?? ''}`.toLowerCase();
-        return terms.every((term) => haystack.includes(term));
-      })
-      .slice(0, limit)
-      .map((post) => ({
-        id: post.id,
-        title: post.title,
-        author: post.authorName,
-        score: post.score,
-        comments: post.numberOfComments,
-        permalink: `https://reddit.com${post.permalink}`,
-        subreddit: post.subredditName,
-        createdAt: post.createdAt.toISOString(),
-        thumbnail:
-          post.thumbnail && post.thumbnail.url.startsWith('http') ? post.thumbnail.url : null,
-        selftext: post.body ?? '',
-      }));
-
-    console.info('[search-posts] fallback results', { requestId, count: fallbackPosts.length });
-    return fallbackPosts;
-  };
+  const mapPost = (post: {
+    id: string;
+    title: string;
+    authorName: string;
+    score: number;
+    numberOfComments: number;
+    permalink: string;
+    subredditName: string;
+    createdAt: Date;
+    thumbnail: { url: string; height: number; width: number } | undefined;
+    body: string | undefined;
+  }) => ({
+    id: post.id,
+    title: post.title,
+    author: post.authorName,
+    score: post.score,
+    comments: post.numberOfComments,
+    permalink: `https://reddit.com${post.permalink}`,
+    subreddit: post.subredditName,
+    createdAt: post.createdAt.toISOString(),
+    thumbnail: post.thumbnail && post.thumbnail.url.startsWith('http') ? post.thumbnail.url : null,
+    selftext: post.body ?? '',
+  });
 
   try {
-    const url = new URL('https://api.reddit.com/search');
-    url.searchParams.set('q', query);
-    url.searchParams.set('limit', limit.toString());
-    url.searchParams.set('sort', 'relevance');
-    url.searchParams.set('t', 'all');
-    url.searchParams.set('raw_json', '1');
-    console.info('[search-posts] upstream request', { requestId, url: url.toString() });
+    const scanLimit = Math.min(Math.max(limit * 25, 250), 800);
+    const [newPosts, hotPosts, risingPosts, topPosts] = await Promise.all([
+      reddit.getNewPosts({ subredditName: 'all', limit: scanLimit }).all(),
+      reddit.getHotPosts({ subredditName: 'all', limit: scanLimit }).all(),
+      reddit.getRisingPosts({ subredditName: 'all', limit: scanLimit }).all(),
+      reddit.getTopPosts({ subredditName: 'all', timeframe: 'day', limit: scanLimit }).all(),
+    ]);
 
-    const response = await fetch(url.toString(), {
-      headers: { 'User-Agent': 'devvit-web-starter/0.0.0 (+https://developers.reddit.com/)' },
-    });
-    console.info('[search-posts] upstream status', { requestId, status: response.status });
+    const allCandidates = [...newPosts, ...hotPosts, ...risingPosts, ...topPosts];
+    const deduped = Array.from(new Map(allCandidates.map((post) => [post.id, post])).values());
 
-    if (!response.ok) {
-      const body = await response.text();
-      console.error('Reddit search upstream error', requestId, response.status, body.slice(0, 300));
-      try {
-        const posts = await fallbackSearch();
-        res.json({
-          type: 'searchPosts',
-          query,
-          limit,
-          posts,
-          debug: {
-            requestId,
-            receivedQuery: rawQuery,
-            normalizedQuery: query,
-            limit,
-            source: 'fallback-upstream-error',
-            upstreamStatus: response.status,
-            fallbackCount: posts.length,
-            fallbackTerms: terms,
-            durationMs: Date.now() - startTime,
-          },
-        });
-        return;
-      } catch (fallbackError) {
-        console.error('Fallback after upstream failure errored:', requestId, fallbackError);
-      }
-      res.status(response.status).json({
-        status: 'error',
-        message: `Reddit search failed (HTTP ${response.status})`,
-        upstream: body.slice(0, 300),
-      });
-      return;
-    }
-
-    const payload = (await response.json()) as {
-      data?: { children?: Array<{ data: Record<string, unknown> }> };
-    };
-
-    const children = payload.data?.children ?? [];
-    console.info('[search-posts] upstream children', { requestId, count: children.length });
-
-    const posts = children
-      .map((child) => child.data)
-      .filter((data) => typeof data === 'object' && data !== null)
-      .map((data) => {
-        const id = (data['id'] as string | undefined) ?? '';
-        const title = (data['title'] as string | undefined) ?? '';
-        const author = (data['author'] as string | undefined) ?? 'unknown';
-        const subreddit = (data['subreddit'] as string | undefined) ?? '';
-        const permalink = (data['permalink'] as string | undefined) ?? '';
-        const thumbnail = (data['thumbnail'] as string | undefined) ?? '';
-        const createdUtc = Number(data['created_utc'] ?? 0) * 1000;
+    const ranked = deduped
+      .map((post) => {
+        const haystack = `${post.title} ${post.body ?? ''}`.toLowerCase();
+        const termMatches = terms.reduce(
+          (count, term) => count + Number(haystack.includes(term)),
+          0
+        );
+        const phraseMatches = phrases.reduce(
+          (count, phrase) => count + Number(haystack.includes(phrase)),
+          0
+        );
+        const termsSatisfied =
+          terms.length === 0
+            ? true
+            : hasExplicitOr
+              ? termMatches > 0
+              : termMatches === terms.length;
+        const phrasesSatisfied = phrases.length === 0 ? true : phraseMatches === phrases.length;
+        if (!termsSatisfied || !phrasesSatisfied) return null;
 
         return {
-          id,
-          title,
-          author,
-          score: Number(data['score'] ?? 0),
-          comments: Number(data['num_comments'] ?? 0),
-          permalink: permalink ? `https://reddit.com${permalink}` : '',
-          subreddit,
-          createdAt: Number.isFinite(createdUtc) ? new Date(createdUtc).toISOString() : '',
-          thumbnail: thumbnail && thumbnail.startsWith('http') ? thumbnail : null,
-          selftext: (data['selftext'] as string | undefined) ?? '',
+          post,
+          termMatches,
+          phraseMatches,
         };
       })
-      .filter((post) => post.id && post.title);
-
-    // If upstream search gave nothing, fall back to local filtered posts.
-    if (posts.length === 0) {
-      console.info('[search-posts] upstream empty, running fallback', { requestId });
-      const fallbackPosts = await fallbackSearch();
-      res.json({
-        type: 'searchPosts',
-        query,
-        limit,
-        posts: fallbackPosts,
-        debug: {
-          requestId,
-          receivedQuery: rawQuery,
-          normalizedQuery: query,
-          limit,
-          source: 'fallback-empty',
-          upstreamStatus: response.status,
-          upstreamCount: children.length,
-          fallbackCount: fallbackPosts.length,
-          fallbackTerms: terms,
-          durationMs: Date.now() - startTime,
-        },
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+      .sort((a, b) => {
+        if (b.phraseMatches !== a.phraseMatches) return b.phraseMatches - a.phraseMatches;
+        if (b.termMatches !== a.termMatches) return b.termMatches - a.termMatches;
+        if (b.post.score !== a.post.score) return b.post.score - a.post.score;
+        return b.post.createdAt.getTime() - a.post.createdAt.getTime();
       });
-      return;
-    }
+
+    const posts = ranked.slice(0, limit).map(({ post }) => mapPost(post));
+    console.info('[search-posts] listing search results', {
+      requestId,
+      scanLimit,
+      candidateCount: deduped.length,
+      matchedCount: ranked.length,
+      returnedCount: posts.length,
+    });
 
     const result: SearchPostsResponse = {
       type: 'searchPosts',
@@ -222,8 +177,9 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
         normalizedQuery: query,
         limit,
         source: 'upstream',
-        upstreamStatus: response.status,
-        upstreamCount: children.length,
+        upstreamCount: deduped.length,
+        fallbackCount: posts.length,
+        fallbackTerms: debugTerms,
         durationMs: Date.now() - startTime,
       },
     };
@@ -231,34 +187,24 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
     res.json(result);
   } catch (error) {
     console.error('API Search Error:', requestId, error);
-    try {
-      const posts = await fallbackSearch();
-      res.json({
-        type: 'searchPosts',
-        query,
+    const result: SearchPostsResponse = {
+      type: 'searchPosts',
+      query,
+      limit,
+      posts: [],
+      debug: {
+        requestId,
+        receivedQuery: rawQuery,
+        normalizedQuery: query,
         limit,
-        posts,
-        debug: {
-          requestId,
-          receivedQuery: rawQuery,
-          normalizedQuery: query,
-          limit,
-          source: 'fallback-exception',
-          fallbackCount: posts.length,
-          fallbackTerms: terms,
-          durationMs: Date.now() - startTime,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        },
-      });
-      return;
-    } catch (fallbackError) {
-      console.error('Fallback search error:', requestId, fallbackError);
-    }
-
-    res.status(500).json({
-      status: 'error',
-      message: 'Failed to search posts',
-    });
+        source: 'fallback-exception',
+        fallbackCount: 0,
+        fallbackTerms: debugTerms,
+        durationMs: Date.now() - startTime,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+    };
+    res.json(result);
   }
 });
 
