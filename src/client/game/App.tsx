@@ -17,7 +17,7 @@ export const App = () => {
   const [queryInput, setQueryInput] = useState('ADHD');
   const [limitInput, setLimitInput] = useState(12);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
-  const { posts, loading, error, search, lastQuery, lastLimit } = useSearchPosts('ADHD', 12);
+  const { posts, loading, error, search, lastQuery, lastLimit, debug } = useSearchPosts('ADHD', 12);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -135,6 +135,33 @@ export const App = () => {
           {!loading && !error && posts.length === 0 && (
             <div className="rounded-xl border border-gray-200 bg-white px-4 py-6 shadow-sm text-sm text-gray-600">
               No posts were found for this query.
+            </div>
+          )}
+
+          {debug && (
+            <div className="rounded-xl border border-gray-200 bg-white px-4 py-4 text-xs text-gray-600 shadow-sm">
+              <div className="font-semibold text-gray-800">Debug</div>
+              <div className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                <div>Request ID: {debug.requestId}</div>
+                <div>Source: {debug.source}</div>
+                <div>Duration: {debug.durationMs} ms</div>
+                <div>Received query: “{debug.receivedQuery}”</div>
+                <div>Normalized query: “{debug.normalizedQuery}”</div>
+                <div>Limit: {debug.limit}</div>
+                {typeof debug.upstreamStatus === 'number' && (
+                  <div>Upstream status: {debug.upstreamStatus}</div>
+                )}
+                {typeof debug.upstreamCount === 'number' && (
+                  <div>Upstream count: {debug.upstreamCount}</div>
+                )}
+                {typeof debug.fallbackCount === 'number' && (
+                  <div>Fallback count: {debug.fallbackCount}</div>
+                )}
+                {debug.fallbackTerms && debug.fallbackTerms.length > 0 && (
+                  <div>Fallback terms: {debug.fallbackTerms.join(', ')}</div>
+                )}
+                {debug.error && <div>Error: {debug.error}</div>}
+              </div>
             </div>
           )}
 

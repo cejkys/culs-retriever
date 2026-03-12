@@ -35,4 +35,19 @@ export type SearchPostsResponse = {
   query: string;
   limit: number;
   posts: SearchPost[];
+  debug?: SearchPostsDebug;
+};
+
+export type SearchPostsDebug = {
+  requestId: string;
+  receivedQuery: string;
+  normalizedQuery: string;
+  limit: number;
+  source: 'upstream' | 'fallback-empty' | 'fallback-upstream-error' | 'fallback-exception';
+  upstreamStatus?: number;
+  upstreamCount?: number;
+  fallbackCount?: number;
+  fallbackTerms?: string[];
+  durationMs: number;
+  error?: string;
 };

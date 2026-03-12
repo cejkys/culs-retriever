@@ -35,7 +35,7 @@ Prerequisites: Node 22 and the Devvit CLI.
 ## API
 
 - `GET /api/search-posts?query=<lucene>&limit=<1-50>`
-  - Returns `{ type: "searchPosts", query, limit, posts[] }`.
+  - Returns `{ type: "searchPosts", query, limit, posts[], debug? }`.
   - Falls back to filtering recent `/r/all` posts if upstream search fails or is empty.
 
 ## Notes

@@ -52,12 +52,14 @@ router.get<{ postId: string }, InitResponse | { status: string; message: string 
 );
 
 router.get('/api/search-posts', async (req, res): Promise<void> => {
+  const startTime = Date.now();
+  const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const rawQuery = typeof req.query.query === 'string' ? req.query.query : 'ADHD';
   const query = rawQuery.trim() || 'ADHD';
 
   const parsedLimit = Number(req.query.limit);
   const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 50) : 12;
-  console.info('[search-posts] request', { query, limit });
+  console.info('[search-posts] request', { requestId, rawQuery, query, limit });
 
   const mapTerms = (text: string) =>
     text
@@ -67,13 +69,15 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
       .filter(Boolean)
       .filter((term) => !['and', 'or', 'not', 'title', 'selftext', 'body'].includes(term));
 
+  const terms = mapTerms(query);
+  console.info('[search-posts] fallback terms', { requestId, count: terms.length, terms });
+
   const fallbackSearch = async () => {
     const listing = reddit.getNewPosts({
       subredditName: 'all',
       limit: Math.min(limit * 3, 100),
     });
     const freshPosts = await listing.all();
-    const terms = mapTerms(query);
 
     const fallbackPosts = freshPosts
       .filter((post) => {
@@ -96,7 +100,7 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
         selftext: post.body ?? '',
       }));
 
-    console.info('[search-posts] fallback results', { count: fallbackPosts.length });
+    console.info('[search-posts] fallback results', { requestId, count: fallbackPosts.length });
     return fallbackPosts;
   };
 
@@ -107,22 +111,38 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
     url.searchParams.set('sort', 'relevance');
     url.searchParams.set('t', 'all');
     url.searchParams.set('raw_json', '1');
-    console.info('[search-posts] upstream request', { url: url.toString() });
+    console.info('[search-posts] upstream request', { requestId, url: url.toString() });
 
     const response = await fetch(url.toString(), {
       headers: { 'User-Agent': 'devvit-web-starter/0.0.0 (+https://developers.reddit.com/)' },
     });
-    console.info('[search-posts] upstream status', { status: response.status });
+    console.info('[search-posts] upstream status', { requestId, status: response.status });
 
     if (!response.ok) {
       const body = await response.text();
-      console.error('Reddit search upstream error', response.status, body.slice(0, 300));
+      console.error('Reddit search upstream error', requestId, response.status, body.slice(0, 300));
       try {
         const posts = await fallbackSearch();
-        res.json({ type: 'searchPosts', query, limit, posts });
+        res.json({
+          type: 'searchPosts',
+          query,
+          limit,
+          posts,
+          debug: {
+            requestId,
+            receivedQuery: rawQuery,
+            normalizedQuery: query,
+            limit,
+            source: 'fallback-upstream-error',
+            upstreamStatus: response.status,
+            fallbackCount: posts.length,
+            fallbackTerms: terms,
+            durationMs: Date.now() - startTime,
+          },
+        });
         return;
       } catch (fallbackError) {
-        console.error('Fallback after upstream failure errored:', fallbackError);
+        console.error('Fallback after upstream failure errored:', requestId, fallbackError);
       }
       res.status(response.status).json({
         status: 'error',
@@ -137,7 +157,7 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
     };
 
     const children = payload.data?.children ?? [];
-    console.info('[search-posts] upstream children', { count: children.length });
+    console.info('[search-posts] upstream children', { requestId, count: children.length });
 
     const posts = children
       .map((child) => child.data)
@@ -168,9 +188,26 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
 
     // If upstream search gave nothing, fall back to local filtered posts.
     if (posts.length === 0) {
-      console.info('[search-posts] upstream empty, running fallback');
+      console.info('[search-posts] upstream empty, running fallback', { requestId });
       const fallbackPosts = await fallbackSearch();
-      res.json({ type: 'searchPosts', query, limit, posts: fallbackPosts });
+      res.json({
+        type: 'searchPosts',
+        query,
+        limit,
+        posts: fallbackPosts,
+        debug: {
+          requestId,
+          receivedQuery: rawQuery,
+          normalizedQuery: query,
+          limit,
+          source: 'fallback-empty',
+          upstreamStatus: response.status,
+          upstreamCount: children.length,
+          fallbackCount: fallbackPosts.length,
+          fallbackTerms: terms,
+          durationMs: Date.now() - startTime,
+        },
+      });
       return;
     }
 
@@ -179,17 +216,43 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
       query,
       limit,
       posts,
+      debug: {
+        requestId,
+        receivedQuery: rawQuery,
+        normalizedQuery: query,
+        limit,
+        source: 'upstream',
+        upstreamStatus: response.status,
+        upstreamCount: children.length,
+        durationMs: Date.now() - startTime,
+      },
     };
 
     res.json(result);
   } catch (error) {
-    console.error('API Search Error:', error);
+    console.error('API Search Error:', requestId, error);
     try {
       const posts = await fallbackSearch();
-      res.json({ type: 'searchPosts', query, limit, posts });
+      res.json({
+        type: 'searchPosts',
+        query,
+        limit,
+        posts,
+        debug: {
+          requestId,
+          receivedQuery: rawQuery,
+          normalizedQuery: query,
+          limit,
+          source: 'fallback-exception',
+          fallbackCount: posts.length,
+          fallbackTerms: terms,
+          durationMs: Date.now() - startTime,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      });
       return;
     } catch (fallbackError) {
-      console.error('Fallback search error:', fallbackError);
+      console.error('Fallback search error:', requestId, fallbackError);
     }
 
     res.status(500).json({
