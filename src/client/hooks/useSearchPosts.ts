@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { SearchPost, SearchPostsDebug, SearchPostsResponse } from '../../shared/types/api';
 
-export const useSearchPosts = (initialQuery = 'ADHD', initialLimit = 12) => {
+export const useSearchPosts = (initialQuery = 'ADHD', initialLimit = 1) => {
   const [posts, setPosts] = useState<SearchPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +46,15 @@ export const useSearchPosts = (initialQuery = 'ADHD', initialLimit = 12) => {
           source: data.debug?.source,
           upstreamStatus: data.debug?.upstreamStatus,
           upstreamCount: data.debug?.upstreamCount,
+          matchedCount: data.debug?.matchedCount,
           fallbackCount: data.debug?.fallbackCount,
+          archiveEnabled: data.debug?.archiveEnabled,
+          archiveConfigSource: data.debug?.archiveConfigSource,
+          archiveScannedCount: data.debug?.archiveScannedCount,
+          archiveMatchedCount: data.debug?.archiveMatchedCount,
+          archiveAddedCount: data.debug?.archiveAddedCount,
+          archivedUpsertedCount: data.debug?.archivedUpsertedCount,
+          archiveLogs: data.debug?.archiveLogs,
           durationMs: data.debug?.durationMs,
           posts: data.posts.length,
         });

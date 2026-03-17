@@ -39,6 +39,10 @@ export type SearchPostsResponse = {
 };
 
 export type SearchPostsDebug = {
+  appName?: string;
+  appVersion?: string;
+  archiveEnabled?: boolean;
+  archiveConfigSource?: 'settings' | 'env' | 'mixed' | 'none';
   requestId: string;
   receivedQuery: string;
   normalizedQuery: string;
@@ -46,8 +50,15 @@ export type SearchPostsDebug = {
   source: 'upstream' | 'fallback-empty' | 'fallback-upstream-error' | 'fallback-exception';
   upstreamStatus?: number;
   upstreamCount?: number;
+  matchedCount?: number;
   fallbackCount?: number;
   fallbackTerms?: string[];
+  archiveScannedCount?: number;
+  archiveMatchedCount?: number;
+  archiveAddedCount?: number;
+  archivedUpsertedCount?: number;
+  archiveLogs?: string[];
   durationMs: number;
   error?: string;
+  archiveError?: string;
 };

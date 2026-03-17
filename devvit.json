@@ -20,6 +20,17 @@
   "media": {
     "dir": "assets"
   },
+  "permissions": {
+    "http": {
+      "enable": true,
+      "domains": ["api.reddit.com", "aqkfaqvtorfbmgekskle.supabase.co"]
+    },
+    "reddit": {
+      "enable": true,
+      "scope": "user"
+    },
+    "redis": true
+  },
   "menu": {
     "items": [
       {
@@ -33,6 +44,33 @@
   },
   "triggers": {
     "onAppInstall": "/internal/on-app-install"
+  },
+  "settings": {
+    "global": {
+      "supabase_url": {
+        "type": "string",
+        "label": "Supabase URL",
+        "helpText": "Project URL, e.g. https://<project-ref>.supabase.co"
+      },
+      "supabase_service_role_key": {
+        "type": "string",
+        "label": "Supabase Service Role Key",
+        "helpText": "Server-side secret key used for archive writes/reads.",
+        "isSecret": true
+      },
+      "supabase_table": {
+        "type": "string",
+        "label": "Supabase Table",
+        "helpText": "Archive table name.",
+        "defaultValue": "reddit_posts"
+      },
+      "archive_fetch_limit": {
+        "type": "number",
+        "label": "Archive Fetch Limit",
+        "helpText": "Max archived rows loaded per query.",
+        "defaultValue": 5000
+      }
+    }
   },
   "dev": {
     "subreddit": "culs_retriever_dev"
