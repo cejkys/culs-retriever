@@ -11,6 +11,7 @@ Devvit web app that surfaces Reddit posts from /r/all listings and displays them
 - Query form includes an expandable Lucene-style query manual with examples (replacing the old reset button).
 - Splash and game views support light/dark mode with persisted user toggle and system preference fallback.
 - Splash and game views support EN/CS language switching with persisted preference and centralized translation dictionaries.
+- Debug panel includes a database connection test button for the optional Supabase archive and shows the latest connection status.
 - Links open the original post on reddit.com.
 - Optional Supabase archive mode persists scanned posts and can supplement live results when live matches are fewer than requested.
 
@@ -44,6 +45,9 @@ Prerequisites: Node 22 and the Devvit CLI.
 - `GET /api/search-posts?query=<text>&limit=<1-50>`
   - Returns `{ type: "searchPosts", query, limit, posts[], debug? }`.
   - Collects a large candidate set from `/r/all` listings and filters/ranks results against parsed query terms.
+- `GET /api/archive-health`
+  - Returns `{ type: "archiveHealth", status, message, checkedAt, durationMs, archiveEnabled, archiveConfigSource, table }`.
+  - Performs a lightweight Supabase REST check against the configured archive table and is used by the UI Debug panel.
 
 ## Optional archive setup (Supabase)
 

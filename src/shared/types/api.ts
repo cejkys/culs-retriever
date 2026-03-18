@@ -38,11 +38,28 @@ export type SearchPostsResponse = {
   debug?: SearchPostsDebug;
 };
 
+export type ArchiveHealthStatus = 'online' | 'offline' | 'disabled' | 'unknown';
+
+export type ArchiveHealthResponse = {
+  type: 'archiveHealth';
+  status: Exclude<ArchiveHealthStatus, 'unknown'>;
+  message: string;
+  checkedAt: string;
+  durationMs: number;
+  archiveEnabled: boolean;
+  archiveConfigSource: 'settings' | 'env' | 'mixed' | 'none';
+  table: string;
+};
+
 export type SearchPostsDebug = {
   appName?: string;
   appVersion?: string;
   archiveEnabled?: boolean;
   archiveConfigSource?: 'settings' | 'env' | 'mixed' | 'none';
+  databaseStatus?: ArchiveHealthStatus;
+  databaseMessage?: string;
+  databaseCheckedAt?: string;
+  databaseDurationMs?: number;
   requestId: string;
   receivedQuery: string;
   normalizedQuery: string;

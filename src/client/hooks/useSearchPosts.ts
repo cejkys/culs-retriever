@@ -1,5 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { SearchPost, SearchPostsDebug, SearchPostsResponse } from '../../shared/types/api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type {
+  ArchiveHealthResponse,
+  SearchPost,
+  SearchPostsDebug,
+  SearchPostsResponse,
+} from '../../shared/types/api';
 
 export const useSearchPosts = (initialQuery = 'ADHD', initialLimit = 1) => {
   const [posts, setPosts] = useState<SearchPost[]>([]);
@@ -7,7 +12,12 @@ export const useSearchPosts = (initialQuery = 'ADHD', initialLimit = 1) => {
   const [error, setError] = useState<string | null>(null);
   const [lastQuery, setLastQuery] = useState(initialQuery);
   const [lastLimit, setLastLimit] = useState(initialLimit);
-  const [debug, setDebug] = useState<SearchPostsDebug | null>(null);
+  const [searchDebug, setSearchDebug] = useState<SearchPostsDebug | null>(null);
+  const [databaseCheckLoading, setDatabaseCheckLoading] = useState(false);
+  const [databaseDebug, setDatabaseDebug] = useState<Pick<
+    SearchPostsDebug,
+    'databaseStatus' | 'databaseMessage' | 'databaseCheckedAt' | 'databaseDurationMs'
+  > | null>(null);
 
   const fetchPosts = useCallback(
     async (query: string, limit: number) => {
@@ -40,7 +50,7 @@ export const useSearchPosts = (initialQuery = 'ADHD', initialLimit = 1) => {
         setPosts(data.posts);
         setLastQuery(data.query);
         setLastLimit(data.limit);
-        setDebug(data.debug ?? null);
+        setSearchDebug(data.debug ?? null);
         console.info('[search-posts] response', {
           requestId: data.debug?.requestId,
           source: data.debug?.source,
@@ -61,7 +71,7 @@ export const useSearchPosts = (initialQuery = 'ADHD', initialLimit = 1) => {
       } catch (err) {
         console.error('Failed to load search posts', err);
         setError(err instanceof Error ? err.message : 'Unknown error');
-        setDebug(null);
+        setSearchDebug(null);
       } finally {
         setLoading(false);
       }
@@ -73,5 +83,55 @@ export const useSearchPosts = (initialQuery = 'ADHD', initialLimit = 1) => {
     void fetchPosts(initialQuery, initialLimit);
   }, [fetchPosts, initialQuery, initialLimit]);
 
-  return { posts, loading, error, search: fetchPosts, lastQuery, lastLimit, debug } as const;
+  const checkDatabaseConnection = useCallback(async () => {
+    setDatabaseCheckLoading(true);
+    try {
+      const response = await fetch('/api/archive-health');
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${text.slice(0, 180)}`);
+      }
+
+      const data = JSON.parse(text) as ArchiveHealthResponse;
+      if (data.type !== 'archiveHealth') {
+        throw new Error('Unexpected response');
+      }
+
+      setDatabaseDebug({
+        databaseStatus: data.status,
+        databaseMessage: data.message,
+        databaseCheckedAt: data.checkedAt,
+        databaseDurationMs: data.durationMs,
+      });
+      console.info('[archive-health] response', data);
+    } catch (err) {
+      const fallbackMessage =
+        err instanceof Error ? err.message : 'Unknown database connection error';
+      setDatabaseDebug({
+        databaseStatus: 'offline',
+        databaseMessage: fallbackMessage,
+        databaseCheckedAt: new Date().toISOString(),
+      });
+      console.error('[archive-health] failed', err);
+    } finally {
+      setDatabaseCheckLoading(false);
+    }
+  }, []);
+
+  const debug = useMemo(() => {
+    if (!searchDebug) return null;
+    return databaseDebug ? { ...searchDebug, ...databaseDebug } : searchDebug;
+  }, [databaseDebug, searchDebug]);
+
+  return {
+    posts,
+    loading,
+    error,
+    search: fetchPosts,
+    lastQuery,
+    lastLimit,
+    debug,
+    checkDatabaseConnection,
+    databaseCheckLoading,
+  } as const;
 };

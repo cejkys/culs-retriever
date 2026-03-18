@@ -1,5 +1,6 @@
 import express from 'express';
 import {
+  ArchiveHealthResponse,
   InitResponse,
   IncrementResponse,
   DecrementResponse,
@@ -195,6 +196,74 @@ const loadArchivePosts = async (config: ArchiveConfig): Promise<SearchPost[]> =>
   return rows.map(fromArchiveRow);
 };
 
+const getArchiveDatabaseStatus = async (config: ArchiveConfig): Promise<ArchiveHealthResponse> => {
+  const startTime = Date.now();
+  const checkedAt = new Date().toISOString();
+  const archiveEnabled = isArchiveEnabled(config);
+
+  if (!archiveEnabled) {
+    return {
+      type: 'archiveHealth',
+      status: 'disabled',
+      message: 'Archive database is disabled: missing Supabase URL or service role key.',
+      checkedAt,
+      durationMs: Date.now() - startTime,
+      archiveEnabled,
+      archiveConfigSource: config.source,
+      table: config.supabaseTable,
+    };
+  }
+
+  const params = new URLSearchParams({
+    select: 'id',
+    limit: '1',
+  });
+  const endpoint = `${config.supabaseUrl}/rest/v1/${encodeURIComponent(config.supabaseTable)}?${params.toString()}`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: supabaseHeaders(config),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return {
+        type: 'archiveHealth',
+        status: 'offline',
+        message: `Database check failed (${response.status}): ${text.slice(0, 180)}`,
+        checkedAt,
+        durationMs: Date.now() - startTime,
+        archiveEnabled,
+        archiveConfigSource: config.source,
+        table: config.supabaseTable,
+      };
+    }
+
+    return {
+      type: 'archiveHealth',
+      status: 'online',
+      message: `Database connection OK for table "${config.supabaseTable}".`,
+      checkedAt,
+      durationMs: Date.now() - startTime,
+      archiveEnabled,
+      archiveConfigSource: config.source,
+      table: config.supabaseTable,
+    };
+  } catch (error) {
+    return {
+      type: 'archiveHealth',
+      status: 'offline',
+      message: error instanceof Error ? error.message : 'Unknown database connection error',
+      checkedAt,
+      durationMs: Date.now() - startTime,
+      archiveEnabled,
+      archiveConfigSource: config.source,
+      table: config.supabaseTable,
+    };
+  }
+};
+
 router.get<{ postId: string }, InitResponse | { status: string; message: string }>(
   '/api/init',
   async (_req, res): Promise<void> => {
@@ -231,6 +300,21 @@ router.get<{ postId: string }, InitResponse | { status: string; message: string 
     }
   }
 );
+
+router.get('/api/archive-health', async (_req, res): Promise<void> => {
+  const archiveConfig = await resolveArchiveConfig();
+  const result = await getArchiveDatabaseStatus(archiveConfig);
+
+  console.info('[archive-health] result', {
+    status: result.status,
+    archiveEnabled: result.archiveEnabled,
+    archiveConfigSource: result.archiveConfigSource,
+    durationMs: result.durationMs,
+    table: result.table,
+  });
+
+  res.json(result);
+});
 
 router.get('/api/search-posts', async (req, res): Promise<void> => {
   const startTime = Date.now();
@@ -431,6 +515,10 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
         appVersion,
         archiveEnabled,
         archiveConfigSource: archiveConfig.source,
+        databaseStatus: archiveEnabled ? 'unknown' : 'disabled',
+        databaseMessage: archiveEnabled
+          ? 'Database connection has not been checked yet.'
+          : 'Archive database is disabled: missing Supabase URL or service role key.',
         requestId,
         receivedQuery: rawQuery,
         normalizedQuery: query,
@@ -463,6 +551,10 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
         appVersion,
         archiveEnabled,
         archiveConfigSource: archiveConfig.source,
+        databaseStatus: archiveEnabled ? 'unknown' : 'disabled',
+        databaseMessage: archiveEnabled
+          ? 'Database connection has not been checked yet.'
+          : 'Archive database is disabled: missing Supabase URL or service role key.',
         requestId,
         receivedQuery: rawQuery,
         normalizedQuery: query,

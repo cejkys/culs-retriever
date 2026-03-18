@@ -29,6 +29,8 @@ export type Dictionary = {
     resultsLabel: string;
     search: string;
     searching: string;
+    checkDatabase: string;
+    checkingDatabase: string;
     showQueryManual: string;
     hideQueryManual: string;
     showingSummary: (shown: number, requested: number, query: string) => string;
@@ -55,6 +57,10 @@ export type Dictionary = {
       appVersion: string;
       archiveEnabled: string;
       archiveConfigSource: string;
+      databaseStatus: string;
+      databaseMessage: string;
+      databaseCheckedAt: string;
+      databaseCheckDuration: string;
       requestId: string;
       source: string;
       duration: string;
@@ -74,6 +80,7 @@ export type Dictionary = {
       fallbackTerms: string;
       error: string;
       archiveError: string;
+      statusValues: Record<'online' | 'offline' | 'disabled' | 'unknown', string>;
       sourceValues: Record<
         'upstream' | 'fallback-empty' | 'fallback-upstream-error' | 'fallback-exception',
         string
@@ -137,6 +144,8 @@ export const translations: Record<Language, Dictionary> = {
       resultsLabel: 'Results',
       search: 'Search',
       searching: 'Searching…',
+      checkDatabase: 'Check database',
+      checkingDatabase: 'Checking database…',
       showQueryManual: 'View query manual',
       hideQueryManual: 'Hide query manual',
       showingSummary: (shown, requested, query) =>
@@ -206,6 +215,10 @@ export const translations: Record<Language, Dictionary> = {
         appVersion: 'App version',
         archiveEnabled: 'Archive enabled',
         archiveConfigSource: 'Archive config source',
+        databaseStatus: 'Database status',
+        databaseMessage: 'Database message',
+        databaseCheckedAt: 'Database checked at',
+        databaseCheckDuration: 'Database check duration',
         requestId: 'Request ID',
         source: 'Source',
         duration: 'Duration',
@@ -225,6 +238,12 @@ export const translations: Record<Language, Dictionary> = {
         fallbackTerms: 'Fallback terms',
         error: 'Error',
         archiveError: 'Archive error',
+        statusValues: {
+          online: 'online',
+          offline: 'offline',
+          disabled: 'disabled',
+          unknown: 'unknown',
+        },
         sourceValues: {
           upstream: 'upstream',
           'fallback-empty': 'fallback-empty',
@@ -293,6 +312,8 @@ export const translations: Record<Language, Dictionary> = {
       resultsLabel: 'Výsledky',
       search: 'Hledat',
       searching: 'Vyhledávám…',
+      checkDatabase: 'Otestovat databázi',
+      checkingDatabase: 'Testuji databázi…',
       showQueryManual: 'Zobrazit manuál dotazů',
       hideQueryManual: 'Skrýt manuál dotazů',
       showingSummary: (shown, requested, query) =>
@@ -365,6 +386,10 @@ export const translations: Record<Language, Dictionary> = {
         appVersion: 'Verze aplikace',
         archiveEnabled: 'Archiv zapnut',
         archiveConfigSource: 'Zdroj konfigurace archivu',
+        databaseStatus: 'Stav databáze',
+        databaseMessage: 'Zpráva databáze',
+        databaseCheckedAt: 'Databáze testována',
+        databaseCheckDuration: 'Doba testu databáze',
         requestId: 'ID požadavku',
         source: 'Zdroj',
         duration: 'Trvání',
@@ -384,6 +409,12 @@ export const translations: Record<Language, Dictionary> = {
         fallbackTerms: 'Fallback termy',
         error: 'Chyba',
         archiveError: 'Chyba archivu',
+        statusValues: {
+          online: 'online',
+          offline: 'offline',
+          disabled: 'disabled',
+          unknown: 'neověřeno',
+        },
         sourceValues: {
           upstream: 'upstream',
           'fallback-empty': 'fallback-prázdný',
