@@ -10,12 +10,14 @@ Devvit web app that surfaces Reddit posts from /r/all listings and displays them
 - Client renders results in a table with title, score, comments, subreddit, age, thumbnail, and a selftext preview with expand/collapse.
 - Query form includes an expandable Lucene-style query manual with examples (replacing the old reset button).
 - Splash and game views support light/dark mode with persisted user toggle and system preference fallback.
+- Splash and game views support EN/CS language switching with persisted preference and centralized translation dictionaries.
 - Links open the original post on reddit.com.
 - Optional Supabase archive mode persists scanned posts and can supplement live results when live matches are fewer than requested.
 
 ## Architecture
 
 - `src/client`: React UI (game view) + splash entrypoint.
+- `src/client/i18n/translations.ts`: Centralized EN/CS UI copy.
 - `src/server`: Express API hosted by Devvit (`/api/search-posts` plus template counter endpoints).
 - `src/shared`: Shared request/response types.
 - `dist`: Build output (generated, do not edit).

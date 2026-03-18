@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-type Theme = 'light' | 'dark';
+export type Theme = 'light' | 'dark';
 
 const STORAGE_KEY = 'culs-retriever-theme';
 const DARK_QUERY = '(prefers-color-scheme: dark)';
