@@ -1,4 +1,3 @@
-import { useEffect, useId, useRef, useState } from 'react';
 import type { Language } from '../i18n/translations';
 import type { Theme } from '../hooks/useTheme';
 
@@ -23,18 +22,6 @@ type DisplayControlsProps = {
 };
 
 const iconClassName = 'h-4 w-4';
-
-const MenuIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    className={iconClassName}
-  >
-    <path strokeLinecap="round" d="M4 7h16M7 12h13M10 17h10" />
-  </svg>
-);
 
 const SunIcon = () => (
   <svg
@@ -88,116 +75,46 @@ export const DisplayControls = ({
   onLanguageChange,
   labels,
   className,
-}: DisplayControlsProps) => {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const menuId = useId();
+}: DisplayControlsProps) => (
+  <div className={`flex items-center gap-2 ${className ?? ''}`}>
+    <button
+      type="button"
+      aria-label={`${labels.themeToggle}: ${theme === 'dark' ? labels.dark : labels.light}`}
+      title={`${labels.themeLabel}: ${theme === 'dark' ? labels.dark : labels.light}`}
+      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500 dark:hover:bg-slate-800"
+      onClick={onToggleTheme}
+    >
+      {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
+    </button>
 
-  useEffect(() => {
-    const onPointerDown = (event: MouseEvent | TouchEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('touchstart', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('touchstart', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, []);
-
-  const currentThemeLabel = theme === 'dark' ? labels.dark : labels.light;
-
-  return (
-    <div ref={containerRef} className={`relative flex items-center justify-end ${className ?? ''}`}>
+    <div className="inline-flex items-center rounded-full border border-gray-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+        <GlobeIcon />
+      </span>
       <button
         type="button"
-        aria-label={labels.menuLabel}
-        aria-expanded={open}
-        aria-controls={menuId}
-        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500 dark:hover:bg-slate-800"
-        onClick={() => setOpen((current) => !current)}
+        aria-label={labels.setEnglish}
+        className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+          language === 'en'
+            ? 'bg-[#d93900] text-white'
+            : 'text-gray-700 hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800'
+        }`}
+        onClick={() => onLanguageChange('en')}
       >
-        <MenuIcon />
+        {labels.english}
       </button>
-
-      {open && (
-        <div
-          id={menuId}
-          className="absolute right-0 top-14 z-20 min-w-60 rounded-2xl border border-gray-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-        >
-          <div className="flex flex-col gap-3">
-            <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
-                {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
-                <span>{labels.themeLabel}</span>
-              </div>
-              <button
-                type="button"
-                aria-label={labels.themeToggle}
-                className="mt-2 inline-flex w-full items-center justify-between rounded-xl bg-white px-3 py-2 text-sm font-semibold text-gray-800 shadow-sm transition-colors hover:bg-gray-100 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-950"
-                onClick={() => {
-                  onToggleTheme();
-                  setOpen(false);
-                }}
-              >
-                <span>{currentThemeLabel}</span>
-                {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
-              </button>
-            </div>
-
-            <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
-                <GlobeIcon />
-                <span>{labels.languageLabel}</span>
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  aria-label={labels.setEnglish}
-                  className={`rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
-                    language === 'en'
-                      ? 'bg-[#d93900] text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-100 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-950'
-                  }`}
-                  onClick={() => {
-                    onLanguageChange('en');
-                    setOpen(false);
-                  }}
-                >
-                  {labels.english}
-                </button>
-                <button
-                  type="button"
-                  aria-label={labels.setCzech}
-                  className={`rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
-                    language === 'cs'
-                      ? 'bg-[#d93900] text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-100 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-950'
-                  }`}
-                  onClick={() => {
-                    onLanguageChange('cs');
-                    setOpen(false);
-                  }}
-                >
-                  {labels.czech}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <button
+        type="button"
+        aria-label={labels.setCzech}
+        className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+          language === 'cs'
+            ? 'bg-[#d93900] text-white'
+            : 'text-gray-700 hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800'
+        }`}
+        onClick={() => onLanguageChange('cs')}
+      >
+        {labels.czech}
+      </button>
     </div>
-  );
-};
+  </div>
+);

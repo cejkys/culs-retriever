@@ -5,8 +5,8 @@ Devvit web app that surfaces Reddit posts from /r/all listings and displays them
 ## What it does
 
 - Accepts a query string plus a result limit (1-50, default 1).
-- Server searches via the Devvit Reddit plugin only (aggregating/ranking `/r/all` `new`, `hot`, `rising`, and `top` listings).
-- The live scan only returns posts that match the parsed query terms in the current candidate window.
+- Server uses Reddit search as the primary upstream and falls back to aggregating/ranking `/r/all` `new`, `hot`, `rising`, and `top` listings when upstream search is empty or errors.
+- The listing fallback only returns posts that match the parsed query terms in the current candidate window.
 - Client renders results in a table with title, score, comments, subreddit, age, thumbnail, and a selftext preview with expand/collapse.
 - Query form includes an expandable Lucene-style query manual with examples (replacing the old reset button).
 - Splash and game views support light/dark mode with persisted user toggle and system preference fallback.
@@ -37,6 +37,7 @@ Prerequisites: Node 22 and the Devvit CLI.
 - `npm run deploy`: Build + upload a new version.
 - `npm run sync:settings`: Sync archive settings from local `.env` into Devvit app settings.
 - `npm run launch`: Sync settings + build + upload + publish for review.
+  - If the current Devvit environment does not support app settings read/write RPCs, sync falls back to a warning and launch continues without changing remote settings.
 - `npm run login`: Authenticate the Devvit CLI.
 - `npm run check`: Type-check, lint, and format.
 
@@ -44,7 +45,7 @@ Prerequisites: Node 22 and the Devvit CLI.
 
 - `GET /api/search-posts?query=<text>&limit=<1-50>`
   - Returns `{ type: "searchPosts", query, limit, posts[], debug? }`.
-  - Collects a large candidate set from `/r/all` listings and filters/ranks results against parsed query terms.
+  - Queries Reddit search first and falls back to filtering/ranking a large candidate set from `/r/all` listings when needed.
 - `GET /api/archive-health`
   - Returns `{ type: "archiveHealth", status, message, checkedAt, durationMs, archiveEnabled, archiveConfigSource, table }`.
   - Performs a lightweight Supabase REST check against the configured archive table and is used by the UI Debug panel.
@@ -90,7 +91,7 @@ create table if not exists public.reddit_posts (
 ## Notes
 
 - `devvit.json` defines two post entrypoints: `splash` (default) and `game` (search UI).
-- `devvit.json` explicitly enables `reddit`, `redis`, and HTTP access to `api.reddit.com` for runtime listing calls.
+- `devvit.json` explicitly enables `reddit`, `redis`, and HTTP access to `api.reddit.com` for runtime Reddit search and listing fallback calls.
 - Search API debug payload includes app version and archive diagnostics (`matchedCount`, archive counts, archive source, archive logs, and archive errors) shown in the UI Debug panel.
 - Archive config resolution order is `Devvit app settings` first, then `.env` fallback (local/dev only).
 - Counter endpoints (`/api/init`, `/api/increment`, `/api/decrement`) are template remnants and are not used by the current UI.

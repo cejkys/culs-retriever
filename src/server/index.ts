@@ -51,6 +51,40 @@ type ArchiveConfig = {
   source: ArchiveConfigSource;
 };
 
+type RedditSearchListingResponse = {
+  data?: {
+    children?: Array<{
+      data?: RedditSearchPostData;
+    }>;
+  };
+};
+
+type RedditSearchPostData = {
+  id?: string;
+  title?: string;
+  author?: string;
+  score?: number;
+  num_comments?: number;
+  permalink?: string;
+  subreddit?: string;
+  created_utc?: number;
+  thumbnail?: string;
+  selftext?: string;
+};
+
+type CompleteRedditSearchPostData = {
+  id: string;
+  title: string;
+  author: string;
+  score?: number;
+  num_comments?: number;
+  permalink: string;
+  subreddit: string;
+  created_utc: number;
+  thumbnail?: string;
+  selftext?: string;
+};
+
 const sanitizeString = (value: string | undefined | null) => (value ?? '').trim();
 
 const parseFetchLimit = (value: string | undefined, fallback = 5000) => {
@@ -264,6 +298,75 @@ const getArchiveDatabaseStatus = async (config: ArchiveConfig): Promise<ArchiveH
   }
 };
 
+const toThumbnailUrl = (thumbnail: string | undefined) =>
+  thumbnail && thumbnail.startsWith('http') ? thumbnail : null;
+
+const hasCompleteSearchPostData = (
+  post: RedditSearchPostData | undefined
+): post is CompleteRedditSearchPostData =>
+  Boolean(
+    post?.id &&
+      post.title &&
+      post.author &&
+      post.permalink &&
+      post.subreddit &&
+      typeof post.created_utc === 'number'
+  );
+
+const fetchUpstreamSearchPosts = async (
+  query: string,
+  limit: number
+): Promise<{
+  status: number;
+  posts: SearchPost[];
+}> => {
+  const params = new URLSearchParams({
+    q: query,
+    limit: limit.toString(),
+    sort: 'relevance',
+    t: 'all',
+    type: 'link',
+    raw_json: '1',
+    include_over_18: 'on',
+    restrict_sr: 'false',
+  });
+  const endpoint = `https://api.reddit.com/search.json?${params.toString()}`;
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`Upstream search failed (${response.status}): ${text.slice(0, 250)}`);
+  }
+
+  const payload = JSON.parse(text) as RedditSearchListingResponse;
+  const children = payload.data?.children ?? [];
+  const posts = children
+    .map((child) => child.data)
+    .filter(hasCompleteSearchPostData)
+    .map((post) => ({
+      id: post.id,
+      title: post.title,
+      author: post.author,
+      score: Number(post.score) || 0,
+      comments: Number(post.num_comments) || 0,
+      permalink: `https://reddit.com${post.permalink}`,
+      subreddit: post.subreddit,
+      createdAt: new Date(post.created_utc * 1000).toISOString(),
+      thumbnail: toThumbnailUrl(post.thumbnail),
+      selftext: post.selftext ?? '',
+    }));
+
+  return {
+    status: response.status,
+    posts,
+  };
+};
+
 router.get<{ postId: string }, InitResponse | { status: string; message: string }>(
   '/api/init',
   async (_req, res): Promise<void> => {
@@ -367,7 +470,7 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
     hasExplicitOr,
   });
 
-  const mapPost = (post: {
+  const mapListingPost = (post: {
     id: string;
     title: string;
     authorName: string;
@@ -397,13 +500,20 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
         if (excludedIds.has(post.id)) return null;
 
         const haystack = `${post.title} ${post.selftext ?? ''}`.toLowerCase();
-        const termMatches = terms.reduce((count, term) => count + Number(haystack.includes(term)), 0);
+        const termMatches = terms.reduce(
+          (count, term) => count + Number(haystack.includes(term)),
+          0
+        );
         const phraseMatches = phrases.reduce(
           (count, phrase) => count + Number(haystack.includes(phrase)),
           0
         );
         const termsSatisfied =
-          terms.length === 0 ? true : hasExplicitOr ? termMatches > 0 : termMatches === terms.length;
+          terms.length === 0
+            ? true
+            : hasExplicitOr
+              ? termMatches > 0
+              : termMatches === terms.length;
         const phrasesSatisfied = phrases.length === 0 ? true : phraseMatches === phrases.length;
         if (!termsSatisfied || !phrasesSatisfied) return null;
 
@@ -422,23 +532,72 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
       });
 
   try {
-    const scanLimit = Math.min(Math.max(limit * 25, 250), 800);
-    pushArchiveLog(`live scan start scanLimit=${scanLimit}`);
-    const [newPosts, hotPosts, risingPosts, topPosts] = await Promise.all([
-      reddit.getNewPosts({ subredditName: 'all', limit: scanLimit }).all(),
-      reddit.getHotPosts({ subredditName: 'all', limit: scanLimit }).all(),
-      reddit.getRisingPosts({ subredditName: 'all', limit: scanLimit }).all(),
-      reddit.getTopPosts({ subredditName: 'all', timeframe: 'day', limit: scanLimit }).all(),
-    ]);
+    const upstreamSearchLimit = Math.min(Math.max(limit * 10, 25), 100);
+    let source: 'upstream' | 'fallback-empty' | 'fallback-upstream-error' | 'fallback-exception' =
+      'upstream';
+    let upstreamStatus: number | undefined;
+    let upstreamCount = 0;
+    let matchedCount = 0;
+    let archiveSeedPosts: SearchPost[] = [];
+    let posts: SearchPost[] = [];
 
-    const allCandidates = [...newPosts, ...hotPosts, ...risingPosts, ...topPosts];
-    const deduped = Array.from(new Map(allCandidates.map((post) => [post.id, post])).values());
-    const liveCandidates = deduped.map((post) => mapPost(post));
-    const liveRanked = rankPosts(liveCandidates);
-    let posts = liveRanked.slice(0, limit).map(({ post }) => post);
-    pushArchiveLog(
-      `live scan done candidates=${liveCandidates.length} matched=${liveRanked.length} returned=${posts.length}`
-    );
+    const runListingFallback = async () => {
+      const scanLimit = Math.min(Math.max(limit * 25, 250), 800);
+      pushArchiveLog(`live scan start scanLimit=${scanLimit}`);
+      const [newPosts, hotPosts, risingPosts, topPosts] = await Promise.all([
+        reddit.getNewPosts({ subredditName: 'all', limit: scanLimit }).all(),
+        reddit.getHotPosts({ subredditName: 'all', limit: scanLimit }).all(),
+        reddit.getRisingPosts({ subredditName: 'all', limit: scanLimit }).all(),
+        reddit.getTopPosts({ subredditName: 'all', timeframe: 'day', limit: scanLimit }).all(),
+      ]);
+
+      const allCandidates = [...newPosts, ...hotPosts, ...risingPosts, ...topPosts];
+      const deduped = Array.from(new Map(allCandidates.map((post) => [post.id, post])).values());
+      const liveCandidates = deduped.map((post) => mapListingPost(post));
+      const liveRanked = rankPosts(liveCandidates);
+
+      pushArchiveLog(
+        `live scan done candidates=${liveCandidates.length} matched=${liveRanked.length} returned=${Math.min(liveRanked.length, limit)}`
+      );
+
+      return {
+        liveCandidates,
+        liveRanked,
+        posts: liveRanked.slice(0, limit).map(({ post }) => post),
+      };
+    };
+
+    try {
+      pushArchiveLog(`upstream search start limit=${upstreamSearchLimit}`);
+      const upstreamSearch = await fetchUpstreamSearchPosts(query, upstreamSearchLimit);
+      upstreamStatus = upstreamSearch.status;
+      upstreamCount = upstreamSearch.posts.length;
+      matchedCount = upstreamSearch.posts.length;
+      archiveSeedPosts = upstreamSearch.posts;
+      posts = upstreamSearch.posts.slice(0, limit);
+      pushArchiveLog(
+        `upstream search done status=${upstreamSearch.status} candidates=${upstreamSearch.posts.length} returned=${posts.length}`
+      );
+
+      if (posts.length === 0) {
+        source = 'fallback-empty';
+        pushArchiveLog('upstream search empty; falling back to live listing scan');
+        const fallback = await runListingFallback();
+        archiveSeedPosts = fallback.liveCandidates;
+        matchedCount = fallback.liveRanked.length;
+        posts = fallback.posts;
+      }
+    } catch (error) {
+      source = 'fallback-upstream-error';
+      pushArchiveLog(
+        `upstream search error=${error instanceof Error ? error.message : 'Unknown upstream search error'}`
+      );
+      const fallback = await runListingFallback();
+      archiveSeedPosts = fallback.liveCandidates;
+      matchedCount = fallback.liveRanked.length;
+      posts = fallback.posts;
+    }
+
     let archiveScannedCount = 0;
     let archiveMatchedCount = 0;
     let archiveAddedCount = 0;
@@ -447,8 +606,8 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
 
     const archiveUpsertPromise = archiveEnabled
       ? (async () => {
-          pushArchiveLog(`archive upsert start rows=${liveCandidates.length}`);
-          const upserted = await archivePosts(archiveConfig, liveCandidates);
+          pushArchiveLog(`archive upsert start rows=${archiveSeedPosts.length}`);
+          const upserted = await archivePosts(archiveConfig, archiveSeedPosts);
           pushArchiveLog(`archive upsert done rows=${upserted}`);
           return upserted;
         })()
@@ -495,9 +654,10 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
 
     console.info('[search-posts] listing search results', {
       requestId,
-      scanLimit,
-      candidateCount: liveCandidates.length,
-      matchedCount: liveRanked.length,
+      source,
+      upstreamStatus,
+      upstreamCount,
+      matchedCount,
       returnedCount: posts.length,
       archiveScannedCount,
       archiveMatchedCount,
@@ -523,9 +683,10 @@ router.get('/api/search-posts', async (req, res): Promise<void> => {
         receivedQuery: rawQuery,
         normalizedQuery: query,
         limit,
-        source: 'upstream',
-        upstreamCount: liveCandidates.length,
-        matchedCount: liveRanked.length,
+        source,
+        ...(typeof upstreamStatus === 'number' ? { upstreamStatus } : {}),
+        upstreamCount,
+        matchedCount,
         fallbackCount: posts.length,
         fallbackTerms: debugTerms,
         archiveScannedCount,

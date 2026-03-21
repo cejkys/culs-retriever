@@ -84,6 +84,12 @@ const runDevvit = (args, input) => {
   return `${result.stdout || ''}${result.stderr || ''}`;
 };
 
+const isUnsupportedSettingsListError = (message) =>
+  /GetAppSettingsFields|GetForm|Unimplemented/i.test(message);
+
+const isUnsupportedSettingsSetError = (message) =>
+  /ValidateAppForm|UpdateSettings|Unimplemented/i.test(message);
+
 const envFromFile = parseEnvFile(ENV_PATH);
 const readEnv = (key) => {
   const runtimeValue = process.env[key];
@@ -104,29 +110,73 @@ if (SKIP_SYNC) {
 
 try {
   console.log('[sync:settings] checking current Devvit settings...');
-  const listOutput = runDevvit(['settings', 'list']);
+  let listOutput = '';
+  let canVerifyRemote = true;
+  let canWriteRemote = true;
+
+  try {
+    listOutput = runDevvit(['settings', 'list']);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!isUnsupportedSettingsListError(message)) {
+      throw error;
+    }
+
+    canVerifyRemote = false;
+    console.warn(
+      '[sync:settings] `devvit settings list` is unsupported by this Devvit environment; falling back to best-effort sync from local .env values only.'
+    );
+  }
+
   const missingRequired = [];
   const summary = [];
 
   for (const entry of SETTINGS) {
     const configuredLocally = readEnv(entry.envKey) ?? entry.defaultValue;
-    const hasRemoteValue = listOutput.includes(entry.settingKey);
+    const hasRemoteValue = canVerifyRemote && listOutput.includes(entry.settingKey);
 
     if (configuredLocally) {
-      runDevvit(['settings', 'set', entry.settingKey], `${configuredLocally}\n`);
-      summary.push(
-        `[sync:settings] set ${entry.settingKey} from ${entry.envKey}${entry.secret ? ' (secret)' : ''}`
-      );
+      if (canWriteRemote) {
+        try {
+          runDevvit(['settings', 'set', entry.settingKey], `${configuredLocally}\n`);
+          summary.push(
+            `[sync:settings] set ${entry.settingKey} from ${entry.envKey}${entry.secret ? ' (secret)' : ''}`
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!isUnsupportedSettingsSetError(message)) {
+            throw error;
+          }
+
+          canWriteRemote = false;
+          summary.push(
+            `[sync:settings] remote settings update unsupported by this Devvit environment; skipping sync for ${entry.settingKey}`
+          );
+          summary.push(
+            '[sync:settings] deploy/publish can continue, but archive settings may remain unchanged remotely'
+          );
+        }
+      } else {
+        summary.push(
+          `[sync:settings] skipped remote write for ${entry.settingKey} because app settings updates are unsupported in this environment`
+        );
+      }
       continue;
     }
 
-    if (hasRemoteValue) {
+    if (canVerifyRemote && hasRemoteValue) {
       summary.push(`[sync:settings] kept existing remote value for ${entry.settingKey}`);
       continue;
     }
 
     if (entry.required) {
-      missingRequired.push(`${entry.envKey} (${entry.settingKey})`);
+      if (canVerifyRemote) {
+        missingRequired.push(`${entry.envKey} (${entry.settingKey})`);
+      } else {
+        summary.push(
+          `[sync:settings] could not verify remote required setting ${entry.settingKey}; provide ${entry.envKey} locally if launch still fails later`
+        );
+      }
     } else {
       summary.push(`[sync:settings] optional ${entry.settingKey} not set`);
     }
@@ -139,6 +189,11 @@ try {
   }
 
   console.log(summary.join('\n'));
+  if (!canWriteRemote) {
+    console.warn(
+      '[sync:settings] completed without remote updates. If the deployed app still needs archive settings, configure them through a Devvit environment that supports app settings mutations.'
+    );
+  }
   console.log('[sync:settings] complete');
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

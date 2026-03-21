@@ -136,9 +136,9 @@ export const translations: Record<Language, Dictionary> = {
     },
     game: {
       brand: 'Reddit API Demo',
-      title: 'Listing-powered search',
+      title: 'Reddit-powered search',
       intro:
-        'Enter query terms and choose how many results to retrieve. Results are collected server-side from multiple /r/all listings and rendered below in a table; full text is preloaded and revealed when you click "View more".',
+        'Enter query terms and choose how many results to retrieve. Results come from Reddit search first, with a live /r/all listing scan used as fallback, and are rendered below in a table; full text is preloaded and revealed when you click "View more".',
       queryLabel: 'Query',
       queryPlaceholder: 'Example: "adhd tips" OR medication',
       resultsLabel: 'Results',
@@ -304,9 +304,9 @@ export const translations: Record<Language, Dictionary> = {
     },
     game: {
       brand: 'Demo Reddit API',
-      title: 'Vyhledávání nad listingy',
+      title: 'Vyhledávání na Redditu',
       intro:
-        'Zadejte dotaz a počet výsledků. Výsledky se sbírají na serveru z více listingů /r/all a zobrazují se níže v tabulce; celý text je načtený předem a rozbalí se po kliknutí na "Zobrazit více".',
+        'Zadejte dotaz a počet výsledků. Výsledky se primárně berou z Reddit search a jako fallback se používá live sken několika /r/all listingů; níže se zobrazují v tabulce a celý text je načtený předem a rozbalí se po kliknutí na "Zobrazit více".',
       queryLabel: 'Dotaz',
       queryPlaceholder: 'Příklad: "adhd tips" OR medication',
       resultsLabel: 'Výsledky',

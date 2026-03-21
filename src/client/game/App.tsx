@@ -119,8 +119,17 @@ export const App = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-amber-50 text-gray-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:text-slate-100">
-      <div className="max-w-5xl mx-auto px-6 py-10 flex flex-col gap-8">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="relative max-w-5xl mx-auto px-6 py-10 flex flex-col gap-8">
+        <DisplayControls
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          language={language}
+          onLanguageChange={setLanguage}
+          labels={t.common}
+          className="absolute right-6 top-6 z-10"
+        />
+
+        <header className="flex flex-col gap-3 pr-28">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[#d93900]">
               {t.game.brand}
@@ -128,14 +137,6 @@ export const App = () => {
             <h1 className="text-3xl sm:text-4xl font-black leading-tight">{t.game.title}</h1>
             <p className="text-gray-600 max-w-2xl dark:text-slate-300">{t.game.intro}</p>
           </div>
-          <DisplayControls
-            theme={theme}
-            onToggleTheme={toggleTheme}
-            language={language}
-            onLanguageChange={setLanguage}
-            labels={t.common}
-            className="self-start sm:self-auto"
-          />
         </header>
 
         <form
