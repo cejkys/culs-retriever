@@ -36,7 +36,8 @@ Prerequisites: Node 22 and the Devvit CLI.
 - `npm run build`: Build client and server.
 - `npm run deploy`: Build + upload a new version.
 - `npm run sync:settings`: Sync archive settings from local `.env` into Devvit app settings.
-- `npm run launch`: Sync settings + build + upload + publish for review.
+  - Requires a current build first because the Devvit CLI validates `devvit.json` output paths.
+- `npm run launch`: Build + sync settings + upload + publish for review.
   - If the current Devvit environment does not support app settings read/write RPCs, sync falls back to a warning and launch continues without changing remote settings.
 - `npm run login`: Authenticate the Devvit CLI.
 - `npm run check`: Type-check, lint, and format.
@@ -87,6 +88,7 @@ create table if not exists public.reddit_posts (
    - If a local value is missing, launch keeps the existing remote setting (if already set).
    - Required keys must exist either locally or remotely, otherwise launch fails fast.
 6. If needed, skip sync once with `SKIP_DEVVIT_SETTINGS_SYNC=1 npm run launch`.
+7. If you run `npm run sync:settings` directly, run `npm run build` first.
 
 ## Notes
 

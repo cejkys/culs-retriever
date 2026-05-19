@@ -32,6 +32,10 @@ const SETTINGS = [
 ];
 
 const CONFIG_PATH = 'devvit.json';
+const REQUIRED_BUILD_PATHS = [
+  'dist/client',
+  'dist/server/index.cjs',
+];
 const ENV_PATH = '.env';
 const SKIP_SYNC = process.env.SKIP_DEVVIT_SETTINGS_SYNC === '1';
 
@@ -65,12 +69,32 @@ const parseEnvFile = (filePath) => {
   return out;
 };
 
+const ensureBuildArtifactsExist = () => {
+  const missingPaths = REQUIRED_BUILD_PATHS.filter((filePath) => !existsSync(filePath));
+  if (missingPaths.length === 0) return;
+
+  throw new Error(
+    `Missing build output required by Devvit CLI config validation:\n- ${missingPaths.join('\n- ')}\nRun \`npm run build\` before \`npm run sync:settings\`, or use \`npm run launch\` which builds first.`
+  );
+};
+
 const runDevvit = (args, input) => {
-  const result = spawnSync('npx', ['devvit', ...args, '--config', CONFIG_PATH], {
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'pipe'],
-    input,
-  });
+  const devvitArgs = ['devvit', ...args, '--config', CONFIG_PATH];
+  const result = process.platform === 'win32'
+    ? spawnSync('cmd.exe', ['/d', '/s', '/c', `npx ${devvitArgs.join(' ')}`], {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        input,
+      })
+    : spawnSync('npx', devvitArgs, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        input,
+      });
+
+  if (result.error) {
+    throw result.error;
+  }
 
   if (result.status !== 0) {
     const details = `${result.stdout || ''}${result.stderr || ''}`.trim();
@@ -109,6 +133,7 @@ if (SKIP_SYNC) {
 }
 
 try {
+  ensureBuildArtifactsExist();
   console.log('[sync:settings] checking current Devvit settings...');
   let listOutput = '';
   let canVerifyRemote = true;
